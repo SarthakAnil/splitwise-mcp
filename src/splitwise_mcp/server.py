@@ -16,13 +16,14 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 # Register all tools (side-effect imports via decorators)
-from splitwise_mcp.tools import register_all  # noqa: E402
+from splitwise_mcp.tools import apply_destructive_gate, register_all  # noqa: E402
 
 register_all(mcp)
 
 
 def main_stdio() -> None:
     """Entry point for local / Docker stdio transport (`amazing-splitwise-mcp`)."""
+    apply_destructive_gate(mcp)
     mcp.run()
 
 
@@ -30,6 +31,7 @@ def main_http() -> None:
     """Entry point for the streamable-http transport behind a bearer (`amazing-splitwise-mcp-http`)."""
     from splitwise_mcp.http import serve
 
+    apply_destructive_gate(mcp)
     serve(mcp)
 
 

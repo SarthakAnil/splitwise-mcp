@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     # the user). Off by default: those tools return an error until SPLITWISE_ALLOW_WRITES=1.
     splitwise_allow_writes: bool = False
 
+    # Second kill-switch for irreversible / hard-to-reverse operations, independent of
+    # SPLITWISE_ALLOW_WRITES. Even with writes enabled, the destructive tools
+    # (delete_expense/delete_group/delete_friend/delete_comment, remove_user_from_group)
+    # are not registered and the client refuses their POSTs unless this is also on.
+    splitwise_allow_destructive: bool = False
+
     # --- streamable-http transport (amazing-splitwise-mcp-http) --------------------
     # Shared secret the HTTP client must present as `Authorization: Bearer <value>`.
     # The server refuses to start when it is shorter than MIN_BEARER_LENGTH.

@@ -29,6 +29,18 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
 
 @pytest.fixture(autouse=True)
+def _restore_tool_registry() -> object:
+    """Undo any tool registration a test changed (the destructive gate toggles the shared singleton)."""
+    from splitwise_mcp.server import mcp
+
+    manager = mcp._tool_manager  # noqa: SLF001 — the SDK exposes no public bulk snapshot
+    snapshot = dict(manager._tools)  # noqa: SLF001
+    yield
+    manager._tools.clear()  # noqa: SLF001
+    manager._tools.update(snapshot)  # noqa: SLF001
+
+
+@pytest.fixture(autouse=True)
 def _isolate_settings_env(
     request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
 ) -> None:

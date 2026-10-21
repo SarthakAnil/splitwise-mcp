@@ -13,6 +13,7 @@ def test_defaults() -> None:
     assert settings.splitwise_api_url == DEFAULT_API_URL
     assert settings.splitwise_request_timeout_seconds == 30.0
     assert settings.splitwise_allow_writes is False
+    assert settings.splitwise_allow_destructive is False
     assert settings.splitwise_mcp_bearer == ""
     assert settings.splitwise_mcp_host == "127.0.0.1"
     assert settings.splitwise_mcp_port == 8765

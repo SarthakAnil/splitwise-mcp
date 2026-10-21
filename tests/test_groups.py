@@ -70,8 +70,12 @@ def _status_error(status: int, body: dict[str, Any], path: str) -> httpx.HTTPSta
     return httpx.HTTPStatusError("boom", request=request, response=response)
 
 
-def _real_client(handler: Any, *, allow_writes: bool) -> SplitwiseClient:
-    settings = Settings(splitwise_api_key="k" * 20, splitwise_allow_writes=allow_writes)
+def _real_client(handler: Any, *, allow_writes: bool, allow_destructive: bool = False) -> SplitwiseClient:
+    settings = Settings(
+        splitwise_api_key="k" * 20,
+        splitwise_allow_writes=allow_writes,
+        splitwise_allow_destructive=allow_destructive,
+    )
     return SplitwiseClient(settings=settings, transport=httpx.MockTransport(handler))
 
 
@@ -488,7 +492,7 @@ async def test_delete_group_success_false_with_non_json_content_type(monkeypatch
         assert request.url.path.endswith("/delete_group/5")
         return httpx.Response(200, content=b'{"success": false}', headers={"content-type": "text/html"})
 
-    _install(monkeypatch, _real_client(handler, allow_writes=True))
+    _install(monkeypatch, _real_client(handler, allow_writes=True, allow_destructive=True))
 
     result = await splitwise_delete_group(GroupIdInput(group_id=5))
 
@@ -664,7 +668,7 @@ async def test_remove_user_with_balance_is_rejected_by_envelope(monkeypatch: pyt
             json={"success": False, "errors": {"base": ["Bob has a non-zero balance in this group"]}},
         )
 
-    _install(monkeypatch, _real_client(handler, allow_writes=True))
+    _install(monkeypatch, _real_client(handler, allow_writes=True, allow_destructive=True))
 
     result = await splitwise_remove_user_from_group(RemoveUserFromGroupInput(group_id=77, user_id=2))
 
