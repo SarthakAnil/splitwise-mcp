@@ -560,7 +560,7 @@ async def splitwise_delete_friend(params: DeleteFriendInput) -> str:
 
     When NOT to Use:
     - To remove someone from a group (use `splitwise_remove_user_from_group`).
-    - To settle a balance (record the repayment as an expense via `splitwise_create_expense`).
+    - To settle a balance (record the repayment with `splitwise_record_settlement`).
     - When the id is uncertain — confirm it first with `splitwise_resolve_friend` or
       `splitwise_get_friend`.
 

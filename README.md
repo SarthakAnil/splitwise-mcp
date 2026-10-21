@@ -16,7 +16,7 @@ that can only reach a public URL (Grok Bot, for one).
 
 ## Safety model
 
-Four rails, all enforced in the HTTP client — not in the tools — so no tool can forget them:
+Five rails, all enforced in the HTTP client — not in the tools — so no tool can forget them:
 
 - **Writes are off by default.** Every `POST` on this API changes your account (there is
   no POST that only reads), so anything that creates, updates, deletes or restores an
@@ -76,7 +76,7 @@ client that has writes enabled.
 ## Available Tools
 
 <!-- TOOL TABLE START -->
-All **33 tools**, grouped by module. 🔒 = refused unless `SPLITWISE_ALLOW_WRITES=1`; 💣 = destructive, also hidden unless `SPLITWISE_ALLOW_DESTRUCTIVE=1`.
+All **34 tools**, grouped by module. 🔒 = refused unless `SPLITWISE_ALLOW_WRITES=1`; 💣 = destructive, also hidden unless `SPLITWISE_ALLOW_DESTRUCTIVE=1`.
 
 | Tool | Description |
 |---|---|
@@ -105,6 +105,7 @@ All **33 tools**, grouped by module. 🔒 = refused unless `SPLITWISE_ALLOW_WRIT
 | `splitwise_delete_expense` 🔒 💣 | Delete an expense (Splitwise keeps it as deleted; restore with `splitwise_undelete_expense`). |
 | `splitwise_get_expense` | Read one expense in full: cost, group, category, every share, repayments and comments. |
 | `splitwise_get_expenses` | List expenses, newest first, optionally filtered by group, friend and date range. |
+| `splitwise_record_settlement` 🔒 | Record a settle-up PAYMENT (`payment: true`) that reduces a debt — from_user_id pays to_user_id. |
 | `splitwise_undelete_expense` 🔒 | Restore a deleted expense. |
 | `splitwise_update_expense` 🔒 | Change an existing expense — only the fields given are sent. |
 | **Balances** | |

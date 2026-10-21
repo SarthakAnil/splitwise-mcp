@@ -20,6 +20,7 @@ from splitwise_mcp.tools.expenses import (
     ExpenseIdInput,
     GetExpenseInput,
     GetExpensesInput,
+    RecordSettlementInput,
     ShareInput,
     UpdateExpenseInput,
     equal_split,
@@ -29,6 +30,7 @@ from splitwise_mcp.tools.expenses import (
     splitwise_delete_expense,
     splitwise_get_expense,
     splitwise_get_expenses,
+    splitwise_record_settlement,
     splitwise_undelete_expense,
     splitwise_update_expense,
 )
@@ -975,6 +977,60 @@ async def test_undelete_expense_rejected_envelope(monkeypatch: pytest.MonkeyPatc
 # Registration
 # ---------------------------------------------------------------------------
 
+SETTLEMENT_CREATED = {
+    "expenses": [{"id": 888, "description": "Settle up", "cost": "25.0", "payment": True, "group_id": 0}],
+    "errors": {},
+}
+
+
+async def test_record_settlement_sends_payment_true(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _install(monkeypatch, {"/create_expense": SETTLEMENT_CREATED})
+
+    await splitwise_record_settlement(RecordSettlementInput(from_user_id=10, to_user_id=20, amount="25.00"))
+
+    assert fake.calls == [
+        (
+            "POST",
+            "/create_expense",
+            {
+                "data": {
+                    "cost": "25.00",
+                    "description": "Settle up",
+                    "payment": True,
+                    "group_id": 0,
+                    "users__0__user_id": 10,
+                    "users__0__paid_share": "25.00",
+                    "users__0__owed_share": "0.00",
+                    "users__1__user_id": 20,
+                    "users__1__paid_share": "0.00",
+                    "users__1__owed_share": "25.00",
+                }
+            },
+        )
+    ]
+
+
+async def test_record_settlement_passes_group_currency_and_date(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _install(monkeypatch, {"/create_expense": SETTLEMENT_CREATED})
+
+    await splitwise_record_settlement(
+        RecordSettlementInput(
+            from_user_id=1, to_user_id=2, amount="10.00", group_id=55, currency_code="eur", date="2026-10-01"
+        )
+    )
+
+    data = fake.calls[0][2]["data"]
+    assert data["payment"] is True
+    assert data["group_id"] == 55
+    assert data["currency_code"] == "EUR"
+    assert data["date"] == "2026-10-01T00:00:00Z"
+
+
+def test_record_settlement_rejects_same_party() -> None:
+    with pytest.raises(ValidationError, match="must differ"):
+        RecordSettlementInput(from_user_id=7, to_user_id=7, amount="5.00")
+
+
 EXPECTED_HINTS = {
     "splitwise_get_expenses": (True, False, True),
     "splitwise_get_expense": (True, False, True),
@@ -982,6 +1038,7 @@ EXPECTED_HINTS = {
     "splitwise_update_expense": (False, False, True),
     "splitwise_delete_expense": (False, True, True),
     "splitwise_undelete_expense": (False, False, True),
+    "splitwise_record_settlement": (False, False, False),
 }
 
 
