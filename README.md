@@ -149,8 +149,8 @@ echoes exactly what Splitwise returned. Tool arguments are nested under a single
 git clone https://github.com/trustxai/splitwise-mcp.git
 cd splitwise-mcp
 uv sync --group dev
-cp .env.example .env            # set SPLITWISE_API_KEY
-uv run amazing-splitwise-mcp    # starts the stdio server
+cp .env.example .env                        # set SPLITWISE_API_KEY
+SPLITWISE_ENV_FILE=.env uv run amazing-splitwise-mcp   # .env is loaded only when pointed at
 ```
 
 The server speaks MCP over stdio, so it is normally launched by an MCP client (see
@@ -306,6 +306,7 @@ is the whole account: rotate it (and the connector) if it ever leaks.
 | `SPLITWISE_ALLOW_DESTRUCTIVE` | `false` | Second kill-switch, independent of writes. `1` registers (and allows) the 💣 destructive tools. |
 | `SPLITWISE_API_URL` | `https://secure.splitwise.com/api/v3.0` | REST base; override only for proxies/tests. |
 | `SPLITWISE_REQUEST_TIMEOUT_SECONDS` | `30` | Per-request timeout. |
+| `SPLITWISE_ENV_FILE` | — | Path to a `.env` file to load (local-dev opt-in). No `.env` is read unless this is set. |
 | `SPLITWISE_MCP_BEARER` | — | HTTP only. Shared secret the client must present (≥ 32 chars). |
 | `SPLITWISE_MCP_HOST` | `127.0.0.1` | HTTP only. Bind address. |
 | `SPLITWISE_MCP_PORT` | `8765` | HTTP only. Bind port. |
@@ -314,7 +315,7 @@ is the whole account: rotate it (and the connector) if it ever leaks.
 | `SPLITWISE_MCP_ALLOWED_ORIGINS` | — | HTTP only. Extra `Origin` values accepted when pinning is on. |
 | `SPLITWISE_MCP_STATELESS` | `true` | HTTP only. Stateless streamable-http. |
 
-The stdio server reads only the first five. Values are whitespace-stripped on the way
+The stdio server reads only the first six. Values are whitespace-stripped on the way
 in (a pasted key with a trailing newline would otherwise be an illegal header).
 
 ## Running Manually

@@ -46,9 +46,9 @@ def _isolate_settings_env(
 ) -> None:
     """Keep the developer's real SPLITWISE_* env / .env out of non-live tests.
 
-    Strips ambient SPLITWISE_* vars, chdirs away from the repo (so
-    `Settings(env_file=".env")` finds nothing), and clears the settings cache
-    before and after each non-live test. Live tests are left untouched.
+    Strips ambient SPLITWISE_* vars (including SPLITWISE_ENV_FILE), chdirs away from the
+    repo, and clears the settings cache before and after each non-live test. Live tests
+    are left untouched.
     """
     if "live" in request.keywords or "live_write" in request.keywords:
         return

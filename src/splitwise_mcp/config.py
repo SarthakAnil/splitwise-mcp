@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
+from typing import Any
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -25,7 +27,14 @@ class Settings(BaseSettings):
     stdio server ignores them.
     """
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # A stray `.env` in the process CWD must NEVER be read on a shared host (secrets arrive
+    # as injected env vars). `.env` is loaded only when SPLITWISE_ENV_FILE names one — a
+    # local-dev opt-in, read per instantiation in __init__ (a path in model_config would
+    # freeze at import, before a caller could set the variable).
+    model_config = SettingsConfigDict(env_file=None, env_file_encoding="utf-8", extra="ignore")
+
+    def __init__(self, **values: Any) -> None:
+        super().__init__(_env_file=os.environ.get("SPLITWISE_ENV_FILE") or None, **values)
 
     # Personal API key from https://secure.splitwise.com/apps (the app's details page).
     # Sent as `Authorization: Bearer <key>` on every request. It is an access token for
