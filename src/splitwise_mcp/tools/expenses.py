@@ -5,7 +5,8 @@ default and counted) and `splitwise_get_expense` (shares, repayments, comments).
 
 Writes (every one is a POST, so the CLIENT refuses it unless SPLITWISE_ALLOW_WRITES=1 —
 these tools never gate): `splitwise_create_expense`, `splitwise_update_expense`,
-`splitwise_delete_expense`, `splitwise_undelete_expense`.
+`splitwise_delete_expense`, `splitwise_undelete_expense`, `splitwise_record_settlement`
+(a `payment: true` settle-up).
 
 Money safety lives here: a create (or an update that sends shares) is checked locally
 with `Decimal` arithmetic — Σ paid_share == Σ owed_share == cost — and refused with a
@@ -331,6 +332,46 @@ class UpdateExpenseInput(_ExpenseFields):
             problem = shares_problem(self.cost, self.shares)
             if problem:
                 raise ValueError(problem)
+        return self
+
+
+class RecordSettlementInput(BaseModel):
+    """Input for splitwise_record_settlement: `from_user_id` pays `to_user_id` `amount`."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    from_user_id: PositiveInt = Field(
+        description="Who PAYS — the debtor handing over money (splitwise_resolve_friend)."
+    )
+    to_user_id: PositiveInt = Field(description="Who RECEIVES the payment — the creditor (splitwise_resolve_friend).")
+    amount: str = Field(description="Amount paid, as a 2-decimal string (e.g. '25.00').")
+    currency_code: str | None = Field(
+        default=None, description="3-letter currency code (USD, PEN, EUR…); default = your default currency."
+    )
+    group_id: int = Field(
+        default=0, ge=0, description="Record it inside this group (splitwise_resolve_group); 0 (default) = non-group."
+    )
+    date: str | None = Field(default=None, description="When it was paid, ISO-8601; default = now.")
+
+    @field_validator("amount", mode="before")
+    @classmethod
+    def _amount(cls, value: object) -> str:
+        return money(value, field="amount")
+
+    @field_validator("currency_code", mode="before")
+    @classmethod
+    def _currency(cls, value: object) -> str | None:
+        return None if value is None else currency_code(value)
+
+    @field_validator("date", mode="before")
+    @classmethod
+    def _date(cls, value: object) -> str | None:
+        return None if value is None else date_iso(value)
+
+    @model_validator(mode="after")
+    def _distinct_parties(self) -> Self:
+        if self.from_user_id == self.to_user_id:
+            raise ValueError("from_user_id and to_user_id must differ — a settlement is between two people")
         return self
 
 
@@ -1177,3 +1218,72 @@ async def splitwise_undelete_expense(params: ExpenseIdInput) -> str:
         )
     except Exception as exc:
         return handle_api_error(exc)
+
+
+@mcp.tool(
+    name="splitwise_record_settlement",
+    annotations=ToolAnnotations(
+        title="Record Splitwise Settle-up Payment",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
+async def splitwise_record_settlement(params: RecordSettlementInput) -> str:
+    """Record a settle-up PAYMENT (`payment: true`) that reduces a debt — from_user_id pays to_user_id.
+
+    Calls `POST /create_expense` with `payment=true`: the payer's `paid_share` = amount and
+    `owed_share` = 0.00, the payee's `paid_share` = 0.00 and `owed_share` = amount. Unlike a
+    plain expense, this is tagged as a payment (settle-up) in the feed.
+    Refused with `Error: … writes are disabled` unless `SPLITWISE_ALLOW_WRITES=1` (enforced
+    by the server's client; this tool never bypasses it). NOT idempotent: every successful
+    call records another payment — never retry blindly after a timeout; list first.
+
+    When to Use:
+    - "I paid Ana back the 25.00 I owed her" (from_user_id = you, to_user_id = Ana).
+    - Recording a cash/bank settle-up so the balance clears without a fake expense.
+
+    When NOT to Use:
+    - To record a shared cost (use `splitwise_create_expense`).
+    - To delete or edit an existing expense (use `splitwise_delete_expense` / `splitwise_update_expense`).
+    - To find a friend's or group's id by name (use `splitwise_resolve_friend` / `splitwise_resolve_group` first).
+
+    Returns:
+    A confirmation echoing Splitwise's response: the literal `errors` value and the
+    settle-up expense as returned (id, cost, group, date and the two shares).
+
+    Examples:
+    - params = {"from_user_id": 491923, "to_user_id": 678, "amount": "25.00"}
+    - params = {"from_user_id": 491923, "to_user_id": 678, "amount": "10.00", "group_id": 12345, "currency_code": "PEN"}
+
+    Error Handling:
+    from_user_id == to_user_id is refused before any request. Splitwise answers 200 even
+    when it rejects the payment — the client turns a non-empty `errors` into
+    `Error: Splitwise rejected the request…`; if that body still carried an expense object
+    the error notes it may have landed, so read back with `splitwise_get_expenses` before
+    retrying. On a timeout or 5xx the outcome is UNKNOWN: check `splitwise_get_expenses`.
+    """
+    try:
+        client = get_client()
+        body: dict[str, Any] = {
+            "cost": params.amount,
+            "description": "Settle up",
+            "payment": True,
+            "group_id": params.group_id,
+            "currency_code": params.currency_code,
+            "date": params.date,
+        }
+        body = {key: value for key, value in body.items() if value is not None}
+        shares = [
+            ShareInput(user_id=params.from_user_id, paid_share=params.amount, owed_share="0.00"),
+            ShareInput(user_id=params.to_user_id, paid_share="0.00", owed_share=params.amount),
+        ]
+        body.update(flatten_shares(shares))
+        resp = await client.request("POST", "/create_expense", data=body)
+        saved = _post_body(resp)
+        if saved is None:
+            return _unknown_outcome("splitwise_get_expenses")
+        return clip_response(_render_saved("create", saved))
+    except Exception as exc:
+        return _with_partial_outcome(handle_api_error(exc), exc, "splitwise_get_expenses")

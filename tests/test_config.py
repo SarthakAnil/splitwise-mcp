@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from splitwise_mcp.config import DEFAULT_API_URL, MIN_BEARER_LENGTH, Settings, get_settings
@@ -13,6 +15,7 @@ def test_defaults() -> None:
     assert settings.splitwise_api_url == DEFAULT_API_URL
     assert settings.splitwise_request_timeout_seconds == 30.0
     assert settings.splitwise_allow_writes is False
+    assert settings.splitwise_allow_destructive is False
     assert settings.splitwise_mcp_bearer == ""
     assert settings.splitwise_mcp_host == "127.0.0.1"
     assert settings.splitwise_mcp_port == 8765
@@ -96,3 +99,25 @@ def test_loopback_hosts(monkeypatch: pytest.MonkeyPatch, host: str) -> None:
 
 def test_get_settings_is_cached() -> None:
     assert get_settings() is get_settings()
+
+
+def test_stray_dotenv_in_cwd_is_ignored(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / ".env").write_text("SPLITWISE_API_KEY=LEAKED\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("SPLITWISE_API_KEY", raising=False)
+    monkeypatch.delenv("SPLITWISE_ENV_FILE", raising=False)
+    assert Settings().splitwise_api_key == ""
+
+
+def test_env_file_opt_in(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    secrets = tmp_path / "secrets.env"
+    secrets.write_text("SPLITWISE_API_KEY=OK\n")
+    monkeypatch.setenv("SPLITWISE_ENV_FILE", str(secrets))
+    monkeypatch.delenv("SPLITWISE_API_KEY", raising=False)
+    assert Settings().splitwise_api_key == "OK"
+
+
+def test_env_file_missing_fails_loudly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SPLITWISE_ENV_FILE", str(tmp_path / "nope.env"))
+    with pytest.raises(ValueError, match="SPLITWISE_ENV_FILE"):
+        Settings()

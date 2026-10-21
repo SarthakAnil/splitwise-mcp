@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
+from pathlib import Path
+from typing import Any
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -25,7 +28,19 @@ class Settings(BaseSettings):
     stdio server ignores them.
     """
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # A stray `.env` in the process CWD must NEVER be read on a shared host (secrets arrive
+    # as injected env vars). `.env` is loaded only when SPLITWISE_ENV_FILE names one — a
+    # local-dev opt-in, read per instantiation in __init__ (a path in model_config would
+    # freeze at import, before a caller could set the variable).
+    model_config = SettingsConfigDict(env_file=None, env_file_encoding="utf-8", extra="ignore")
+
+    def __init__(self, **values: Any) -> None:
+        env_file = os.environ.get("SPLITWISE_ENV_FILE") or None
+        # pydantic-settings silently skips a missing env_file; a typo'd opt-in must not
+        # quietly run with no key.
+        if env_file is not None and not Path(env_file).is_file():
+            raise ValueError(f"SPLITWISE_ENV_FILE={env_file!r} is not a readable file")
+        super().__init__(_env_file=env_file, **values)
 
     # Personal API key from https://secure.splitwise.com/apps (the app's details page).
     # Sent as `Authorization: Bearer <key>` on every request. It is an access token for
@@ -41,6 +56,12 @@ class Settings(BaseSettings):
     # write (create/update/delete/undelete expenses, groups, friends, comments; update
     # the user). Off by default: those tools return an error until SPLITWISE_ALLOW_WRITES=1.
     splitwise_allow_writes: bool = False
+
+    # Second kill-switch for irreversible / hard-to-reverse operations, independent of
+    # SPLITWISE_ALLOW_WRITES. Even with writes enabled, the destructive tools
+    # (delete_expense/delete_group/delete_friend/delete_comment, remove_user_from_group)
+    # are not registered and the client refuses their POSTs unless this is also on.
+    splitwise_allow_destructive: bool = False
 
     # --- streamable-http transport (amazing-splitwise-mcp-http) --------------------
     # Shared secret the HTTP client must present as `Authorization: Bearer <value>`.

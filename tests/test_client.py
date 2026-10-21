@@ -246,7 +246,11 @@ async def test_envelope_empty_errors_is_success() -> None:
 
 
 async def test_envelope_success_false_without_errors_still_raises() -> None:
-    client = _client_with(_capturing_handler({}, body={"success": False}), splitwise_allow_writes=True)
+    client = _client_with(
+        _capturing_handler({}, body={"success": False}),
+        splitwise_allow_writes=True,
+        splitwise_allow_destructive=True,
+    )
     with pytest.raises(SplitwiseEnvelopeError, match="no error message"):
         await client.request("POST", "/delete_expense/1")
 

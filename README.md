@@ -16,13 +16,18 @@ that can only reach a public URL (Grok Bot, for one).
 
 ## Safety model
 
-Four rails, all enforced in the HTTP client — not in the tools — so no tool can forget them:
+Five rails, all enforced in the HTTP client — not in the tools — so no tool can forget them:
 
 - **Writes are off by default.** Every `POST` on this API changes your account (there is
   no POST that only reads), so anything that creates, updates, deletes or restores an
   expense, group, friend or comment, or edits your profile, returns
   `Error: … writes are disabled` until `SPLITWISE_ALLOW_WRITES=1`. Those tools are marked
   🔒 below. Reads need nothing.
+- **Destructive deletes need a second switch.** Deleting an expense, group, friend or
+  comment, or removing a member from a group (the 💣 tools below), is refused — and the
+  tool is not even registered — unless `SPLITWISE_ALLOW_DESTRUCTIVE=1` is set on top of
+  writes. The client enforces the refusal too, so a destructive `POST` cannot slip
+  through even with writes on.
 - **Your login can never be changed.** `password` is never sent anywhere and `email` is
   never sent to `update_user` — the profile tool only edits name, locale and default
   currency, whatever an LLM asks for.
@@ -71,7 +76,7 @@ client that has writes enabled.
 ## Available Tools
 
 <!-- TOOL TABLE START -->
-All **33 tools**, grouped by module. 🔒 = refused unless `SPLITWISE_ALLOW_WRITES=1`.
+All **34 tools**, grouped by module. 🔒 = refused unless `SPLITWISE_ALLOW_WRITES=1`; 💣 = destructive, also hidden unless `SPLITWISE_ALLOW_DESTRUCTIVE=1`.
 
 | Tool | Description |
 |---|---|
@@ -84,22 +89,23 @@ All **33 tools**, grouped by module. 🔒 = refused unless `SPLITWISE_ALLOW_WRIT
 | **Groups** | |
 | `splitwise_add_user_to_group` 🔒 | Add a person to a group, by user id or by inviting a name + email. 🔒 write. |
 | `splitwise_create_group` 🔒 | Create a group, optionally with members (you are added automatically). 🔒 write. |
-| `splitwise_delete_group` 🔒 | Delete a group and all its expenses — for every member, not just you. 🔒 destructive write. |
+| `splitwise_delete_group` 🔒 💣 | Delete a group and all its expenses — for every member, not just you. 🔒 destructive write. |
 | `splitwise_get_group` | Read one group: its members with balances, who owes whom, and the invite link. |
 | `splitwise_get_groups` | List every group you belong to, with members count and balances per currency. |
-| `splitwise_remove_user_from_group` 🔒 | Remove a member from a group. 🔒 destructive write. |
+| `splitwise_remove_user_from_group` 🔒 💣 | Remove a member from a group. 🔒 destructive write. |
 | `splitwise_undelete_group` 🔒 | Restore a deleted group (and its expenses). 🔒 write. |
 | **Friends** | |
 | `splitwise_create_friend` 🔒 | Add one person as a Splitwise friend by e-mail. 🔒 Needs SPLITWISE_ALLOW_WRITES=1. |
 | `splitwise_create_friends` 🔒 | Add several people as Splitwise friends in one call. 🔒 Needs SPLITWISE_ALLOW_WRITES=1. |
-| `splitwise_delete_friend` 🔒 | Remove a friendship (unfriend a user). 🔒 Needs SPLITWISE_ALLOW_WRITES=1. Destructive. |
+| `splitwise_delete_friend` 🔒 💣 | Remove a friendship (unfriend a user). 🔒 Needs SPLITWISE_ALLOW_WRITES=1. Destructive. |
 | `splitwise_get_friend` | Get one Splitwise friend with their overall and per-group balances. |
 | `splitwise_get_friends` | List your Splitwise friends with their balance per currency. |
 | **Expenses** | |
 | `splitwise_create_expense` 🔒 | Create an expense with exactly one split mode; the shares are checked locally before sending. |
-| `splitwise_delete_expense` 🔒 | Delete an expense (Splitwise keeps it as deleted; restore with `splitwise_undelete_expense`). |
+| `splitwise_delete_expense` 🔒 💣 | Delete an expense (Splitwise keeps it as deleted; restore with `splitwise_undelete_expense`). |
 | `splitwise_get_expense` | Read one expense in full: cost, group, category, every share, repayments and comments. |
 | `splitwise_get_expenses` | List expenses, newest first, optionally filtered by group, friend and date range. |
+| `splitwise_record_settlement` 🔒 | Record a settle-up PAYMENT (`payment: true`) that reduces a debt — from_user_id pays to_user_id. |
 | `splitwise_undelete_expense` 🔒 | Restore a deleted expense. |
 | `splitwise_update_expense` 🔒 | Change an existing expense — only the fields given are sent. |
 | **Balances** | |
@@ -113,7 +119,7 @@ All **33 tools**, grouped by module. 🔒 = refused unless `SPLITWISE_ALLOW_WRIT
 | `splitwise_resolve_group` | Turn a group's name into its Splitwise group id, with ranked fuzzy candidates. |
 | **Comments** | |
 | `splitwise_create_comment` 🔒 | Add a comment to a Splitwise expense. |
-| `splitwise_delete_comment` 🔒 | Delete a comment from a Splitwise expense (destructive; comments have no undelete). |
+| `splitwise_delete_comment` 🔒 💣 | Delete a comment from a Splitwise expense (destructive; comments have no undelete). |
 | `splitwise_get_comments` | List the comments on one Splitwise expense. |
 | **Notifications** | |
 | `splitwise_get_notifications` | List your recent Splitwise activity (notifications), newest first. |
@@ -144,8 +150,8 @@ echoes exactly what Splitwise returned. Tool arguments are nested under a single
 git clone https://github.com/trustxai/splitwise-mcp.git
 cd splitwise-mcp
 uv sync --group dev
-cp .env.example .env            # set SPLITWISE_API_KEY
-uv run amazing-splitwise-mcp    # starts the stdio server
+cp .env.example .env                        # set SPLITWISE_API_KEY
+SPLITWISE_ENV_FILE=.env uv run amazing-splitwise-mcp   # .env is loaded only when pointed at
 ```
 
 The server speaks MCP over stdio, so it is normally launched by an MCP client (see
@@ -298,8 +304,10 @@ is the whole account: rotate it (and the connector) if it ever leaks.
 |---|---|---|
 | `SPLITWISE_API_KEY` | — | Personal API key, sent as `Authorization: Bearer`. Required. |
 | `SPLITWISE_ALLOW_WRITES` | `false` | Kill-switch. `1` allows every 🔒 tool. |
+| `SPLITWISE_ALLOW_DESTRUCTIVE` | `false` | Second kill-switch, independent of writes. `1` registers (and allows) the 💣 destructive tools. |
 | `SPLITWISE_API_URL` | `https://secure.splitwise.com/api/v3.0` | REST base; override only for proxies/tests. |
 | `SPLITWISE_REQUEST_TIMEOUT_SECONDS` | `30` | Per-request timeout. |
+| `SPLITWISE_ENV_FILE` | — | Path to a `.env` file to load (local-dev opt-in). No `.env` is read unless this is set. |
 | `SPLITWISE_MCP_BEARER` | — | HTTP only. Shared secret the client must present (≥ 32 chars). |
 | `SPLITWISE_MCP_HOST` | `127.0.0.1` | HTTP only. Bind address. |
 | `SPLITWISE_MCP_PORT` | `8765` | HTTP only. Bind port. |
@@ -308,7 +316,7 @@ is the whole account: rotate it (and the connector) if it ever leaks.
 | `SPLITWISE_MCP_ALLOWED_ORIGINS` | — | HTTP only. Extra `Origin` values accepted when pinning is on. |
 | `SPLITWISE_MCP_STATELESS` | `true` | HTTP only. Stateless streamable-http. |
 
-The stdio server reads only the first four. Values are whitespace-stripped on the way
+The stdio server reads only the first six. Values are whitespace-stripped on the way
 in (a pasted key with a trailing newline would otherwise be an illegal header).
 
 ## Running Manually

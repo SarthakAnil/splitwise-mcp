@@ -40,6 +40,22 @@ FORBIDDEN_FIELDS: dict[str, frozenset[str]] = {
     "/update_user": frozenset({"email", "password"}),
 }
 
+# Non-GET endpoints that destroy or detach records. Gated by SPLITWISE_ALLOW_DESTRUCTIVE
+# on top of SPLITWISE_ALLOW_WRITES (undelete_* is recovery, not destruction).
+DESTRUCTIVE_PATH_PREFIXES: tuple[str, ...] = (
+    "/delete_expense",
+    "/delete_group",
+    "/delete_friend",
+    "/delete_comment",
+    "/remove_user_from_group",
+)
+
+
+def is_destructive(path: str) -> bool:
+    """True when `path` hits a destructive endpoint (exact match or `<prefix>/<id>`)."""
+    bare = "/" + path.lstrip("/")
+    return any(bare == prefix or bare.startswith(prefix + "/") for prefix in DESTRUCTIVE_PATH_PREFIXES)
+
 
 class SplitwiseEnvelopeError(RuntimeError):
     """A 200 response whose body says the write failed (`success: false` / non-empty `errors`).
@@ -157,6 +173,11 @@ class SplitwiseClient:
                 f"{method.upper()} {path} would change your Splitwise account, but writes are disabled. "
                 "Set SPLITWISE_ALLOW_WRITES=1 to allow creating, updating and deleting expenses, groups, "
                 "friends and comments. Reads work without it."
+            )
+        if is_write(method) and is_destructive(path) and not self._settings.splitwise_allow_destructive:
+            raise WritesDisabledError(
+                f"{method.upper()} {path} is a destructive delete. Writes are on, but destructive deletes "
+                "are refused unless SPLITWISE_ALLOW_DESTRUCTIVE=1."
             )
 
     # -- requests ------------------------------------------------------------

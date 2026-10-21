@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import logging
+import sys
 
 from mcp.server.fastmcp import FastMCP
+
+from splitwise_mcp.config import get_settings
 
 mcp = FastMCP("splitwise_mcp")
 
@@ -16,13 +19,21 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 # Register all tools (side-effect imports via decorators)
-from splitwise_mcp.tools import register_all  # noqa: E402
+from splitwise_mcp.tools import apply_destructive_gate, register_all  # noqa: E402
 
 register_all(mcp)
 
 
 def main_stdio() -> None:
     """Entry point for local / Docker stdio transport (`amazing-splitwise-mcp`)."""
+    if not get_settings().has_api_key:
+        print(
+            "amazing-splitwise-mcp: refusing to start: SPLITWISE_API_KEY is not set "
+            "(https://secure.splitwise.com/apps).",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    apply_destructive_gate(mcp)
     mcp.run()
 
 
@@ -30,6 +41,7 @@ def main_http() -> None:
     """Entry point for the streamable-http transport behind a bearer (`amazing-splitwise-mcp-http`)."""
     from splitwise_mcp.http import serve
 
+    apply_destructive_gate(mcp)
     serve(mcp)
 
 

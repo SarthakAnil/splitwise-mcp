@@ -7,7 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from splitwise_mcp.server import main_http, mcp
+from splitwise_mcp.config import get_settings
+from splitwise_mcp.server import main_http, main_stdio, mcp
+from splitwise_mcp.tools import DESTRUCTIVE_TOOL_NAMES
 
 EXPECTED_MODULES = [
     "balances",
@@ -61,6 +63,32 @@ def test_http_entry_point_is_wired_to_serve(
     monkeypatch.setattr("splitwise_mcp.http.serve", received.append)
     main_http()
     assert received == [mcp]
+
+
+def test_main_stdio_refuses_without_key(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.delenv("SPLITWISE_API_KEY", raising=False)
+    get_settings.cache_clear()
+    called: list[int] = []
+    monkeypatch.setattr(mcp, "run", lambda *args, **kwargs: called.append(1))
+
+    with pytest.raises(SystemExit) as excinfo:
+        main_stdio()
+
+    assert excinfo.value.code == 2
+    assert called == []
+    assert "SPLITWISE_API_KEY" in capsys.readouterr().err
+
+
+async def test_main_stdio_runs_with_key_and_hides_destructive_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SPLITWISE_API_KEY", "k" * 16)
+    get_settings.cache_clear()
+    called: list[int] = []
+    monkeypatch.setattr(mcp, "run", lambda *args, **kwargs: called.append(1))
+
+    main_stdio()
+
+    assert called == [1]
+    assert DESTRUCTIVE_TOOL_NAMES.isdisjoint({tool.name for tool in await mcp.list_tools()})
 
 
 def test_console_scripts_declared() -> None:

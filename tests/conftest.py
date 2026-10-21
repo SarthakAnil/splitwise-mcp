@@ -29,14 +29,26 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
 
 @pytest.fixture(autouse=True)
+def _restore_tool_registry() -> object:
+    """Undo any tool registration a test changed (the destructive gate toggles the shared singleton)."""
+    from splitwise_mcp.server import mcp
+
+    manager = mcp._tool_manager  # noqa: SLF001 — the SDK exposes no public bulk snapshot
+    snapshot = dict(manager._tools)  # noqa: SLF001
+    yield
+    manager._tools.clear()  # noqa: SLF001
+    manager._tools.update(snapshot)  # noqa: SLF001
+
+
+@pytest.fixture(autouse=True)
 def _isolate_settings_env(
     request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
 ) -> None:
     """Keep the developer's real SPLITWISE_* env / .env out of non-live tests.
 
-    Strips ambient SPLITWISE_* vars, chdirs away from the repo (so
-    `Settings(env_file=".env")` finds nothing), and clears the settings cache
-    before and after each non-live test. Live tests are left untouched.
+    Strips ambient SPLITWISE_* vars (including SPLITWISE_ENV_FILE), chdirs away from the
+    repo, and clears the settings cache before and after each non-live test. Live tests
+    are left untouched.
     """
     if "live" in request.keywords or "live_write" in request.keywords:
         return

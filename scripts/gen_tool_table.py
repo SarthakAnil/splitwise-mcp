@@ -36,16 +36,18 @@ def _first_line(doc: str | None) -> str:
 
 def build_table() -> str:
     tools = asyncio.run(mcp.list_tools())
-    by_module: dict[str, list[tuple[str, str, bool]]] = {}
+    by_module: dict[str, list[tuple[str, str, bool, bool]]] = {}
     manager = mcp._tool_manager  # noqa: SLF001 — the SDK exposes no public per-tool module lookup
     for tool in tools:
         registered = manager.get_tool(tool.name)
         fn = getattr(registered, "fn", None)
         module = (getattr(fn, "__module__", "") or "").rsplit(".", 1)[-1]
         # A write is anything the tool itself does not declare read-only: the client's
-        # kill-switch refuses it unless SPLITWISE_ALLOW_WRITES=1.
+        # kill-switch refuses it unless SPLITWISE_ALLOW_WRITES=1. A destructive write
+        # needs SPLITWISE_ALLOW_DESTRUCTIVE=1 too, and is hidden without it.
         gated = not (tool.annotations is not None and tool.annotations.readOnlyHint is True)
-        by_module.setdefault(module, []).append((tool.name, _first_line(tool.description), gated))
+        destructive = tool.annotations is not None and tool.annotations.destructiveHint is True
+        by_module.setdefault(module, []).append((tool.name, _first_line(tool.description), gated, destructive))
 
     lines = ["| Tool | Description |", "|---|---|"]
     total = 0
@@ -54,16 +56,19 @@ def build_table() -> str:
         if not rows:
             continue
         lines.append(f"| **{title}** | |")
-        for name, desc, gated in rows:
-            flag = " 🔒" if gated else ""
+        for name, desc, gated, destructive in rows:
+            flag = (" 🔒" if gated else "") + (" 💣" if destructive else "")
             lines.append(f"| `{name}`{flag} | {desc} |")
             total += 1
     for module, rows in by_module.items():  # anything not in MODULE_ORDER — should be empty
         lines.append(f"| **{module}** | |")
-        for name, desc, _gated in sorted(rows):
+        for name, desc, _gated, _destructive in sorted(rows):
             lines.append(f"| `{name}` | {desc} |")
             total += 1
-    header = f"All **{total} tools**, grouped by module. 🔒 = refused unless `SPLITWISE_ALLOW_WRITES=1`."
+    header = (
+        f"All **{total} tools**, grouped by module. 🔒 = refused unless `SPLITWISE_ALLOW_WRITES=1`; "
+        "💣 = destructive, also hidden unless `SPLITWISE_ALLOW_DESTRUCTIVE=1`."
+    )
     return header + "\n\n" + "\n".join(lines) + "\n"
 
 
