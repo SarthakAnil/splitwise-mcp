@@ -9,6 +9,7 @@ import pytest
 
 from splitwise_mcp.config import get_settings
 from splitwise_mcp.server import main_http, main_stdio, mcp
+from splitwise_mcp.tools import DESTRUCTIVE_TOOL_NAMES
 
 EXPECTED_MODULES = [
     "balances",
@@ -78,7 +79,7 @@ def test_main_stdio_refuses_without_key(monkeypatch: pytest.MonkeyPatch, capsys:
     assert "SPLITWISE_API_KEY" in capsys.readouterr().err
 
 
-def test_main_stdio_runs_with_key(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_main_stdio_runs_with_key_and_hides_destructive_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SPLITWISE_API_KEY", "k" * 16)
     get_settings.cache_clear()
     called: list[int] = []
@@ -87,6 +88,7 @@ def test_main_stdio_runs_with_key(monkeypatch: pytest.MonkeyPatch) -> None:
     main_stdio()
 
     assert called == [1]
+    assert DESTRUCTIVE_TOOL_NAMES.isdisjoint({tool.name for tool in await mcp.list_tools()})
 
 
 def test_console_scripts_declared() -> None:
