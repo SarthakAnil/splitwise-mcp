@@ -1031,6 +1031,19 @@ def test_record_settlement_rejects_same_party() -> None:
         RecordSettlementInput(from_user_id=7, to_user_id=7, amount="5.00")
 
 
+@pytest.mark.parametrize(
+    ("amount", "match"),
+    [("0", "positive"), ("-5", "positive"), ("1.005", "at most 2 decimal places"), (1.5, "not a float")],
+)
+def test_record_settlement_rejects_bad_amount(amount: object, match: str) -> None:
+    with pytest.raises(ValidationError, match=match):
+        RecordSettlementInput(from_user_id=10, to_user_id=20, amount=amount)
+
+
+def test_record_settlement_normalises_amount() -> None:
+    assert RecordSettlementInput(from_user_id=10, to_user_id=20, amount=" 25 ").amount == "25.00"
+
+
 EXPECTED_HINTS = {
     "splitwise_get_expenses": (True, False, True),
     "splitwise_get_expense": (True, False, True),

@@ -115,3 +115,9 @@ def test_env_file_opt_in(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("SPLITWISE_ENV_FILE", str(secrets))
     monkeypatch.delenv("SPLITWISE_API_KEY", raising=False)
     assert Settings().splitwise_api_key == "OK"
+
+
+def test_env_file_missing_fails_loudly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SPLITWISE_ENV_FILE", str(tmp_path / "nope.env"))
+    with pytest.raises(ValueError, match="SPLITWISE_ENV_FILE"):
+        Settings()

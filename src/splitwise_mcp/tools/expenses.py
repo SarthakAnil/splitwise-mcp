@@ -1235,7 +1235,7 @@ async def splitwise_record_settlement(params: RecordSettlementInput) -> str:
 
     Calls `POST /create_expense` with `payment=true`: the payer's `paid_share` = amount and
     `owed_share` = 0.00, the payee's `paid_share` = 0.00 and `owed_share` = amount. Unlike a
-    plain expense, this is tagged as a settle-up in the feed and does not count as spend.
+    plain expense, this is tagged as a payment (settle-up) in the feed.
     Refused with `Error: … writes are disabled` unless `SPLITWISE_ALLOW_WRITES=1` (enforced
     by the server's client; this tool never bypasses it). NOT idempotent: every successful
     call records another payment — never retry blindly after a timeout; list first.

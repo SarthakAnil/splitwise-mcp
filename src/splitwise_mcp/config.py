@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from pydantic import field_validator
@@ -34,7 +35,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=None, env_file_encoding="utf-8", extra="ignore")
 
     def __init__(self, **values: Any) -> None:
-        super().__init__(_env_file=os.environ.get("SPLITWISE_ENV_FILE") or None, **values)
+        env_file = os.environ.get("SPLITWISE_ENV_FILE") or None
+        # pydantic-settings silently skips a missing env_file; a typo'd opt-in must not
+        # quietly run with no key.
+        if env_file is not None and not Path(env_file).is_file():
+            raise ValueError(f"SPLITWISE_ENV_FILE={env_file!r} is not a readable file")
+        super().__init__(_env_file=env_file, **values)
 
     # Personal API key from https://secure.splitwise.com/apps (the app's details page).
     # Sent as `Authorization: Bearer <key>` on every request. It is an access token for
