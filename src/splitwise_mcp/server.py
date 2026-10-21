@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import logging
+import sys
 
 from mcp.server.fastmcp import FastMCP
+
+from splitwise_mcp.config import get_settings
 
 mcp = FastMCP("splitwise_mcp")
 
@@ -23,6 +26,13 @@ register_all(mcp)
 
 def main_stdio() -> None:
     """Entry point for local / Docker stdio transport (`amazing-splitwise-mcp`)."""
+    if not get_settings().has_api_key:
+        print(
+            "amazing-splitwise-mcp: refusing to start: SPLITWISE_API_KEY is not set "
+            "(https://secure.splitwise.com/apps).",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
     apply_destructive_gate(mcp)
     mcp.run()
 
